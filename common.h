@@ -24,7 +24,7 @@
 #define MAX_WAIT 100000   // microseconds
 
 // Control Flag Masks
-#define SEQ_MASK 0x01     
+#define SYN_MASK 0x01     
 #define ACK_MASK 0x02
 #define TMO_MASK 0x04
 

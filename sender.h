@@ -19,5 +19,7 @@
 
 void init_sender(Sender *, int);
 void * run_sender(void *);
+struct timeval* next_expiring_timeval(Sender* s);
+void test_next_expiring_timeval( Sender *s );
 
 #endif

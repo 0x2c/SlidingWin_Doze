@@ -1,25 +1,107 @@
 #include "sender.h"
 
-void init_sender(Sender * sender, int id)
-{
-    //TODO: You should fill in this function as necessary
-    sender->send_id = id;
-    sender->input_cmdlist_head = NULL;
-    sender->input_framelist_head = NULL;
-    pthread_cond_init(&sender->buffer_cv, NULL);
-    pthread_mutex_init(&sender->buffer_mutex, NULL);
+void init_sender(Sender * s, int id) {
+    s->send_id = id;
+    s->input_cmdlist_head = NULL;
+    s->input_framelist_head = NULL;
+    pthread_cond_init(&s->buffer_cv, NULL);
+    pthread_mutex_init(&s->buffer_mutex, NULL);
+
+    s->LFS = MAX_SEQ-1;
+    s->LAR = MAX_SEQ-1;
+    s->SWS = 0;
+    int N = glb_receivers_array_length;
+    s->buffer = (LLnode**) malloc( N * sizeof(LLnode*) );
+    while( --N >= 0 ) {
+        s->buffer[N] = NULL;
+    }
+
+    if( DEBUG ) {
+        fprintf(stderr, "Running Sanity Checks\n");
+        test_next_expiring_timeval(s);
+
+    }
+    
 }
 
-struct timeval * sender_get_next_expiring_timeval(Sender * sender)
-{
-    //TODO: You should fill in this function so that it returns the next timeout that should occur
+/***
+ *  Sender keeps track of when frames were sent out in the current sliding window
+    Sender will always wait 1 decisecond unless this function returns a timeval to 
+    wake prematurely due to a frame that will timeout within that interval
+ */
+struct timeval* next_expiring_timeval(Sender* s) {
+    struct timeval now;
+    int N = glb_receivers_array_length;
+    LLnode *iter = NULL;
+    while( --N >= 0 ) {
+        if( (iter = s->buffer[N]) ) {
+            do {
+                gettimeofday( &now, NULL ); // prevent dsync if loop takes too long
+                FrameBuf *temp = (FrameBuf *)iter->value;
+                time_t exsec = temp->expires.tv_sec;
+                time_t exusec = temp->expires.tv_usec;
+                if( now.tv_sec <= exsec && now.tv_usec < exusec ) {
+                    if( temp->buf[3] & ACK_MASK ) 
+                        continue; // check if frame has been acked.
+                                  // removed later on.
+                    return &temp->expires;
+                }
+            } while( (iter = iter->next) != s->buffer[N] );
+        }
+    }
     return NULL;
 }
 
+Frame* test_createFrame(int src, int dst, int seq, int ctr, char *msg, int msglen) {
+    Frame *f = (Frame *)malloc( sizeof(Frame) );
+    f->src = src;
+    f->dst = dst;
+    f->seq = seq;
+    f->ctr = ctr;
+    memcpy(f->data, msg, msglen);
+/*
+    char *whatsit = convert_frame_to_char(f);
+    FrameBuf *bf = (FrameBuf*)malloc( sizeof(FrameBuf));
+    bf->buf = whatsit;
+    printf("%s\n", whatsit);
+*/
+    return f;
+}
 
-void handle_incoming_acks(Sender * sender,
-                          LLnode ** outgoing_frames_head_ptr)
-{
+void test_next_expiring_timeval( Sender *s ) {
+    struct timeval now;
+    gettimeofday( &now, NULL );
+
+    fprintf(stderr, "Testing next expiring timeval\n");
+    fprintf(stderr, "Inserting 17 frames into buffer\n");
+    int i = 0;
+    for(; i < 17; ++i) {
+        Frame *f = test_createFrame(0, 0, i, SYN_MASK, "Hello", 5);
+         
+        //ll_append_node(&s->buffer[0], b);
+
+        // LLnode * testNode = (LLnode *)malloc( sizeof(LLnode) );
+        // testNode->type = LLtype.llt_frame; 
+        // FrameBuf *testBuf = (FrameBuf *)malloc( sizeof(FrameBuf) );
+        
+        
+        // ll_append_node(&(s->buffer[0]), testNode);
+    }
+}
+
+void handle_timedout_frames(Sender * sender, LLnode ** outgoing_frames_head_ptr) {
+    struct timeval now;
+    int N = glb_receivers_array_length;
+    while( --N >= 0 ) {
+    }
+    //TODO: Suggested steps for handling timed out datagrams
+    //    1) Iterate through the sliding window protocol information you maintain for each receiver
+    //    2) Locate frames that are timed out and add them to the outgoing frames
+    //    3) Update the next timeout field on the outgoing frames
+}
+
+
+void handle_incoming_acks(Sender * s, LLnode ** outgoing_frames) {
     //TODO: Suggested steps for handling incoming ACKs
     //    1) Dequeue the ACK from the sender->input_framelist_head
     //    2) Convert the char * buffer to a Frame data type
@@ -29,9 +111,7 @@ void handle_incoming_acks(Sender * sender,
 }
 
 
-void handle_input_cmds(Sender * sender,
-                       LLnode ** outgoing_frames_head_ptr)
-{
+void handle_input_cmds(Sender * sender, LLnode ** outgoing_frames_head_ptr) {
     //TODO: Suggested steps for handling input cmd
     //    1) Dequeue the Cmd from sender->input_cmdlist_head
     //    2) Convert to Frame
@@ -85,14 +165,6 @@ void handle_input_cmds(Sender * sender,
 }
 
 
-void handle_timedout_frames(Sender * sender,
-                            LLnode ** outgoing_frames_head_ptr)
-{
-    //TODO: Suggested steps for handling timed out datagrams
-    //    1) Iterate through the sliding window protocol information you maintain for each receiver
-    //    2) Locate frames that are timed out and add them to the outgoing frames
-    //    3) Update the next timeout field on the outgoing frames
-}
 
 
 void * run_sender(void * input_sender)
@@ -128,11 +200,10 @@ void * run_sender(void * input_sender)
         time_spec.tv_nsec = curr_timeval.tv_usec * 1000;
 
         //Check for the next event we should handle
-        expiring_timeval = sender_get_next_expiring_timeval(sender);
+        expiring_timeval = next_expiring_timeval(sender);
 
         //Perform full on timeout
-        if (expiring_timeval == NULL)
-        {
+        if (expiring_timeval == NULL) {
             time_spec.tv_sec += WAIT_SEC_TIME;
             time_spec.tv_nsec += WAIT_USEC_TIME * 1000;
         }

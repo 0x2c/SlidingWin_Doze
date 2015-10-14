@@ -9,7 +9,7 @@ LDFLAGS = -lresolv -lnsl -lpthread -lm
 
 OS = LINUX
 
-CCFLAGS = -Wall $(DEBUG) -D$(OS)
+CCFLAGS = $(DEBUG) -D$(OS)
 
 # add object file names here
 OBJS = main.o util.o input.o communicate.o sender.o receiver.o
