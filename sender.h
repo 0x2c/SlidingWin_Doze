@@ -35,7 +35,7 @@ void init_sender(Sender *, int);
 
  * POST-CONDITION: <1>sentAwaiting is clear
  * of any timedout frames for incoming
- * return bufs most urgent timeval
+ * RETURN: salient frame's timeval
  *
  * ---------------------------------------------------
  */
