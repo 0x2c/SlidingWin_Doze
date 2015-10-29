@@ -53,6 +53,7 @@ struct timeval* next_expiring_timeval(Sender* s);
  * POST-CONDITION: <1>sentAwaiting cleared
  * frames that need to be acknowledged
  *
+ * !!May need to removed ackd frame from timedout
  * ---------------------------------------------------
  */
 void handle_incoming_acks(Sender * s, LLnode ** outgoing);
@@ -61,13 +62,11 @@ void handle_incoming_acks(Sender * s, LLnode ** outgoing);
 /* ---------------------------------------------------
  * FUNCTION: handle_input_cmds
  * ---------------------------------------------------
- * Communicate.h populates with frames that are either
- * from the commandLine or buffered in memory from
- * fragmentation since the limit is 8 for mesg
- * that is too long. Give <3>MemBuf priort
+ * Communicate.h populates with frames that are either from the commandLine
+ * or bufferd in memory from fragmentation since the limit is 8 for msg
+ * that are too long. Gives <3>MemBuf priority over commandLine LL
  
- * PRE-CONDITION: <1>sentAwaiting ackd
- * cleared in handle_incoming_acks
+ * PRE-CONDITION: <1>sentAwaiting cleared in handle_incoming_ack
  
  * POST-CONDITION:  new frames
  * filled <1>sentAwaiting.

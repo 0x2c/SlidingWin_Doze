@@ -16,54 +16,47 @@ void init_sender(Sender * s, int id) {
     allocArray(s->sentAwait, LLnode *, N, 0);
     allocArray(s->timedout, LLnode *, N, 0);
     allocArray(s->memoryBuf, LLnode *, N, 0);
+    while( --N >= 0 ) {
+        ll_insert_node(&s->sentAwait[N], (LLnode *)malloc(sizeof(LLnode)), llt_head);
+        ll_insert_node(&s->timedout[N], (LLnode *)malloc(sizeof(LLnode)), llt_head);
+        ll_insert_node(&s->memoryBuf[N], (LLnode *)malloc(sizeof(LLnode)), llt_head);
+    }
 }
 
-/***
- *  Sender keeps track of when frames were sent out in the current sliding window
-    Sender will always wait 1 decisecond unless this function returns a timeval to
-    wake prematurely due to a frame that will timeout within that interval
- 
-    Can be sure that buffer will be clean of any ACKed frames
- */
 struct timeval* next_expiring_timeval(Sender* s) {
     struct timeval now;
     gettimeofday( &now, NULL );
     int N = glb_receivers_array_length;
-    LLnode *iter = NULL;
     struct timeval *next_expiring = NULL;
     
     while( --N >= 0 ) {
-        iter = s->sentAwait[N];
-        // Not using a head llnode so need do-while to iterate and not miss
-        if( iter != NULL && iter->value != NULL ) {
-            do {
-                struct timeval ts = ((FrameBuf *)iter->value)->expires;
-                if( next_expiring == NULL ) {
-                    next_expiring = (struct timeval*)malloc( sizeof(struct timeval) );
-                    next_expiring->tv_sec = ts.tv_sec;
-                    next_expiring->tv_usec = ts.tv_usec;
-                } else if( ts.tv_sec <= next_expiring->tv_sec && ts.tv_usec < next_expiring->tv_usec ) {
-                    next_expiring->tv_sec = ts.tv_sec;
-                    next_expiring->tv_usec = ts.tv_usec;
-                }
-                
-                // Frame has expired? Put node into
-                if( now.tv_sec >= ts.tv_sec && now.tv_usec > ts.tv_usec ) {
-                    LLnode *expired = ll_pop_node(&iter);
-                    iter = (iter != NULL ? iter->prev : NULL);
-                    ll_append_node( &s->timedout[N], (FrameBuf*)expired->value );
-                    expired->value = NULL;
-                    free(expired);
-                }
-            } while( iter != NULL && (iter = iter->next) != s->sentAwait[N] );
+        LLnode *iter = s->sentAwait[N];
+        while( (iter = iter->next ) != s->sentAwait[N] ) {
+            struct timeval ts = ((FrameBuf *)iter->value)->expires;
+            if( next_expiring == NULL )  {
+                next_expiring = (struct timeval *)malloc(sizeof(struct timeval));
+                next_expiring->tv_sec = ts.tv_sec;
+                next_expiring->tv_usec = ts.tv_usec;
+            } else if( ts.tv_sec <= next_expiring->tv_sec && ts.tv_usec < next_expiring->tv_usec ) {
+                next_expiring->tv_sec = ts.tv_sec;
+                next_expiring->tv_usec = ts.tv_usec;
+            }
+            // Frame has expired? Take node out of sentAwait
+            // and append to timedout buffer for sendSYN
+            // When
+            if( now.tv_sec >= ts.tv_sec && now.tv_usec > ts.tv_usec ) {
+                LLnode *expired = ll_pop_node(&iter);
+                iter = iter->prev;
+                ll_insert_node( &s->timedout[N], expired, llt_node );
+            }
         }
     }
     return next_expiring;
 }
 
 void handle_incoming_acks(Sender * s, LLnode ** outgoing) {
+    
 }
-
 
 void handle_input_cmds(Sender * s, LLnode ** outgoing) {
     
@@ -151,9 +144,9 @@ void * run_sender(void * input_sender) {
 
         handle_input_cmds(sender, &outgoing_frames_head);
 
-        pthread_mutex_unlock(&sender->buffer_mutex);
-
         handle_timedout_frames(sender, &outgoing_frames_head);
+        
+        pthread_mutex_unlock(&sender->buffer_mutex);
 
         //CHANGE THIS AT YOUR OWN RISK!
         //Send out all the frames

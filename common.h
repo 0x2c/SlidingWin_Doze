@@ -84,8 +84,9 @@ enum LLtype {
     llt_frame,
     llt_framebuf,
     llt_integer,
-    llt_head
-} LLtype;
+    llt_head,
+    llt_node
+};
 
 struct LLnode_t {
     struct LLnode_t * prev;
@@ -94,6 +95,7 @@ struct LLnode_t {
     void * value;
 };
 
+typedef enum LLtype LLtype;
 typedef struct LLnode_t LLnode;
 
 

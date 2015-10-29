@@ -36,6 +36,31 @@ void ll_append_node(LLnode ** headPtr, void * value) {
     }
 }
 
+// PostConfiguration ..<-[newNode]<->[head]->..
+void ll_insert_node(LLnode ** headPtr, void * value, LLtype t) {
+    if( headPtr == NULL )
+        return;
+    LLnode *head = *headPtr;
+    LLnode *newNode = NULL;
+    if( t != llt_node && t != llt_head ) {
+        newNode = (LLnode *) malloc(sizeof(LLnode));
+        newNode->value = value;
+    } else {
+        newNode = (LLnode *)value;
+    }
+    newNode->type = t;
+    
+    if( head == NULL ) {
+        (*headPtr) = newNode;
+        newNode->prev = newNode->next = newNode;
+    } else {
+        newNode->prev = head->prev;
+        newNode->next = head;
+        newNode->prev->next = newNode;
+        head->prev = newNode;
+    }
+}
+
 // Removes the head and returns it
 // Headptr set to next node or NULL if there isn't any
 LLnode * ll_pop_node(LLnode ** headPtr) {

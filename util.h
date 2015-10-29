@@ -17,6 +17,7 @@
 //Linked list functions
 int ll_get_length(LLnode *);
 void ll_append_node(LLnode **, void *);
+void ll_insert_node(LLnode **, void *, LLtype t);
 LLnode * ll_pop_node(LLnode **);
 void ll_destroy_node(LLnode *);
 
@@ -26,7 +27,6 @@ void print_frame(Frame *);
 
 //Time functions
 long timeval_usecdiff(struct timeval *, struct timeval *);
-
 
 char * convert_frame_to_char(Frame *);
 Frame * convert_char_to_frame(char *);
