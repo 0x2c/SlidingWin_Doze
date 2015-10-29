@@ -114,7 +114,6 @@ struct Sender_t {
     uchar8_t *SWS; // Sender Window Size ( LFS<seq#> - LAR<seq#> )
     
     LLnode **sentAwait;
-    LLnode **timedout;
     LLnode **memoryBuf;
 };
 

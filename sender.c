@@ -14,11 +14,9 @@ void init_sender(Sender * s, int id) {
     allocArray(s->SWS, uchar8_t, N, 0);
     
     allocArray(s->sentAwait, LLnode *, N, 0);
-    allocArray(s->timedout, LLnode *, N, 0);
     allocArray(s->memoryBuf, LLnode *, N, 0);
     while( --N >= 0 ) {
         ll_insert_node(&s->sentAwait[N], (LLnode *)malloc(sizeof(LLnode)), llt_head);
-        ll_insert_node(&s->timedout[N], (LLnode *)malloc(sizeof(LLnode)), llt_head);
         ll_insert_node(&s->memoryBuf[N], (LLnode *)malloc(sizeof(LLnode)), llt_head);
     }
 }
@@ -41,12 +39,9 @@ struct timeval* next_expiring_timeval(Sender* s) {
                 next_expiring->tv_sec = ts.tv_sec;
                 next_expiring->tv_usec = ts.tv_usec;
             }
-            // Frame has expired? Take node out of sentAwait
-            // and append to timedout buffer for sendSYN
+
             if( now.tv_sec >= ts.tv_sec && now.tv_usec > ts.tv_usec ) {
-                LLnode *expired = ll_pop_node(&iter);
-                iter = iter->prev;
-                ll_insert_node( &s->timedout[N], expired, llt_node );
+                ((FrameBuf *)iter->value)->buf[3] |= TMO_MASK;
             }
         }
     }
@@ -67,40 +62,52 @@ void handle_incoming_acks(Sender * s, LLnode ** outgoing) {
     while( ll_get_length(s->input_framelist_head) > 0 ) {
         LLnode *acknode = ll_pop_node(&s->input_framelist_head);
         char *_rawframe = ((FrameBuf*)acknode->value)->buf;
+        LLnode *sent = s->sentAwait[_rawframe[1]];
         
-        if( _rawframe[0] == s->send_id ) {
-            LLnode *sent = s->sentAwait[_rawframe[1]];
-            LLnode *to = s->timedout[_rawframe[1]];
+        if( _rawframe[0] != s->send_id ) {
+            ll_destroy_node(acknode); // drop the frame
+            continue;
+        }
+
+        // Was receiver's window full?
+        if( !(_rawframe[3] & ACK_MASK) ) {
             
-            // Was receiver's window full?
-            // Send frame with seqnum LAR + 1 again and put this frame back into outgoing
-            if( !(_rawframe[3] & ACK_MASK) ) {
-                FrameBuf *resend = NULL;
-                while( resend == NULL && (sent = sent->next) != s->sentAwait[_rawframe[1]] ) {
-                    if( ((FrameBuf *)sent->value)->buf[2] == (s->LAR[_rawframe[1]] + 1) % MAX_SEQ ) {
-                        resend = (FrameBuf *)sent->value;
-                    }
-                }
-                while( resend == NULL && (to = to->next) != s->timedout[_rawframe[1]] ) {
-                    if( ((FrameBuf *)to->value)->buf[2] == (s->LAR[_rawframe[1]] + 1) % MAX_SEQ ) {
-                        resend = (FrameBuf *)to->value;
-                        gettimeofday(&resend->expires, NULL);
-                        LLnode *temp = ll_pop_node(&to);
-                        ll_insert_node(&s->sentAwait[_rawframe[1]]->next, temp, llt_node);
-                    }
-                }
-                if( resend != NULL ) {
+            while( (sent = sent->next) != s->sentAwait[_rawframe[1]] ) {
+                if( ((FrameBuf *)sent->value)->buf[2] == (s->LAR[_rawframe[1]] + 1) % MAX_SEQ ) {
+                    FrameBuf *resend = (FrameBuf *)sent->value;
                     FrameBuf *fb = (FrameBuf *)malloc(sizeof(FrameBuf));
                     fb->buf = (char *) malloc(MAX_FRAME_SIZE);
                     memcpy(fb->buf, resend->buf, MAX_FRAME_SIZE);
                     ll_insert_node(outgoing, fb, llt_framebuf);
+                    ll_insert_node(outgoing, acknode, llt_node);
+                    break;
                 }
-                ll_insert_node(outgoing, acknode, llt_node);
-            } else if( _rawframe[2] == (s->LAR[_rawframe[1]]+1) % MAX_SEQ) {
-                
             }
+        } else {
+            
+            while( (sent = sent->next) != s->sentAwait[_rawframe[1]] ) {
+                char *stored = ((FrameBuf *)sent->value)->buf;
+                // found the frame in the buffer
+                if( _rawframe[2] == stored[2] ) {
+                    if( stored[2] == (s->LAR[_rawframe[1]]+1) % MAX_SEQ ) { // desired ack to move window
+                        uchar8_t recv_id = _rawframe[1];
+                        fprintf(stderr, "NOTICE <SND_%d> : Got an ACK from <RECV_%d>\n",s->send_id, recv_id);
+                        // increase sliding window
+                        s->LAR[recv_id] = (s->LAR[recv_id]+1) % MAX_SEQ;
+                        s->SWS[recv_id] = (s->LFS[recv_id] + MAX_SEQ - s->LAR[recv_id]) % MAX_SEQ;
+                        LLnode* LAR = ll_pop_node(&sent);
+                        ll_destroy_node(LAR);
+                        sent = sent->prev;
+                    }
+                    break;
+                }
+            }
+            // Dropped if duplicate (ctr::ACK set), frame wasn't found, or ACK was out of order
+            ll_destroy_node(acknode);
         }
+        
     }
+    
 }
 
 void handle_input_cmds(Sender * s, LLnode ** outgoing) {
