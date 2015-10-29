@@ -51,7 +51,7 @@ struct timeval* next_expiring_timeval(Sender* s);
  * PRE-CONDITION: <1>sentAwaiting clear of TMO
  
  * POST-CONDITION: <1>sentAwaiting cleared
- * frames that need to be acknowledged
+ * of frames that were acknowledged
  *
  * !!May need to removed ackd frame from timedout
  * ---------------------------------------------------

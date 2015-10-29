@@ -43,7 +43,6 @@ struct timeval* next_expiring_timeval(Sender* s) {
             }
             // Frame has expired? Take node out of sentAwait
             // and append to timedout buffer for sendSYN
-            // When
             if( now.tv_sec >= ts.tv_sec && now.tv_usec > ts.tv_usec ) {
                 LLnode *expired = ll_pop_node(&iter);
                 iter = iter->prev;
@@ -54,8 +53,54 @@ struct timeval* next_expiring_timeval(Sender* s) {
     return next_expiring;
 }
 
+// For a frame:
+// [0] = src
+// [1] = dst
+// [2] = seq
+// [3] = ctr
+
+// Note: If receiver sends back node without ACK flag set,
+// its seq is larger than LAF, so resend sender's last ACK
+// frame to keep both windows synchronized.
 void handle_incoming_acks(Sender * s, LLnode ** outgoing) {
     
+    while( ll_get_length(s->input_framelist_head) > 0 ) {
+        LLnode *acknode = ll_pop_node(&s->input_framelist_head);
+        char *_rawframe = ((FrameBuf*)acknode->value)->buf;
+        
+        if( _rawframe[0] == s->send_id ) {
+            LLnode *sent = s->sentAwait[_rawframe[1]];
+            LLnode *to = s->timedout[_rawframe[1]];
+            
+            // Was receiver's window full?
+            // Send frame with seqnum LAR + 1 again and put this frame back into outgoing
+            if( !(_rawframe[3] & ACK_MASK) ) {
+                FrameBuf *resend = NULL;
+                while( resend == NULL && (sent = sent->next) != s->sentAwait[_rawframe[1]] ) {
+                    if( ((FrameBuf *)sent->value)->buf[2] == (s->LAR[_rawframe[1]] + 1) % MAX_SEQ ) {
+                        resend = (FrameBuf *)sent->value;
+                    }
+                }
+                while( resend == NULL && (to = to->next) != s->timedout[_rawframe[1]] ) {
+                    if( ((FrameBuf *)to->value)->buf[2] == (s->LAR[_rawframe[1]] + 1) % MAX_SEQ ) {
+                        resend = (FrameBuf *)to->value;
+                        gettimeofday(&resend->expires, NULL);
+                        LLnode *temp = ll_pop_node(&to);
+                        ll_insert_node(&s->sentAwait[_rawframe[1]]->next, temp, llt_node);
+                    }
+                }
+                if( resend != NULL ) {
+                    FrameBuf *fb = (FrameBuf *)malloc(sizeof(FrameBuf));
+                    fb->buf = (char *) malloc(MAX_FRAME_SIZE);
+                    memcpy(fb->buf, resend->buf, MAX_FRAME_SIZE);
+                    ll_insert_node(outgoing, fb, llt_framebuf);
+                }
+                ll_insert_node(outgoing, acknode, llt_node);
+            } else if( _rawframe[2] == (s->LAR[_rawframe[1]]+1) % MAX_SEQ) {
+                
+            }
+        }
+    }
 }
 
 void handle_input_cmds(Sender * s, LLnode ** outgoing) {
