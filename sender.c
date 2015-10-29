@@ -83,8 +83,6 @@ void handle_incoming_acks(Sender * s, LLnode ** outgoing) {
                     break;
                 }
             }
-            
-            // !!deleting correctly?
         } else {
             
             while( (sent = sent->next) != s->sentAwait[_rawframe[1]] ) {
@@ -167,7 +165,27 @@ void handle_input_cmds(Sender * s, LLnode ** outgoing) {
 }
 
 void handle_timedout_frames(Sender * s, LLnode ** outgoing) {
-
+    
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    
+    int N = glb_receivers_array_length;
+    while( --N >= 0 ) {
+        LLnode *iter = s->sentAwait[N];
+        while( (iter = iter->next) != s->sentAwait[N] ) {
+            FrameBuf *verify = (FrameBuf *)iter->value;
+            if( verify->expires.tv_sec >= now.tv_sec && verify->expires.tv_usec >= now.tv_usec ) {
+                verify->expires.tv_usec += MAX_WAIT;
+                if ( verify->expires.tv_usec >= 1000000) {
+                    verify->expires.tv_sec++;
+                    verify->expires.tv_usec -= 1000000;
+                }
+                FrameBuf *resend = makecopy(verify);
+                resend->buf[3] = SYN_MASK;
+                ll_append_node(outgoing, resend);
+            }
+        }
+    }
 }
 
 void * run_sender(void * input_sender) {
