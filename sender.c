@@ -83,6 +83,8 @@ void handle_incoming_acks(Sender * s, LLnode ** outgoing) {
                     break;
                 }
             }
+            
+            // !!deleting correctly?
         } else {
             
             while( (sent = sent->next) != s->sentAwait[_rawframe[1]] ) {
@@ -110,8 +112,58 @@ void handle_incoming_acks(Sender * s, LLnode ** outgoing) {
     
 }
 
+FrameBuf* makecopy(FrameBuf* original) {
+    FrameBuf *copy = (FrameBuf *)malloc(sizeof(FrameBuf));
+    copy->buf = (char *) malloc(MAX_FRAME_SIZE);
+    memcpy(copy->buf, original->buf, MAX_FRAME_SIZE);
+    copy->expires = original->expires;
+    return copy;
+}
+
 void handle_input_cmds(Sender * s, LLnode ** outgoing) {
-    
+    while( ll_get_length(s->input_cmdlist_head) > 0) {
+        LLnode *cmdNode = ll_pop_node(&s->input_cmdlist_head);
+        Cmd *input = (Cmd *)cmdNode->value;
+        free(cmdNode);
+        
+        uchar8_t recv_id = input->dst_id;
+        if( s->SWS[recv_id] < MAX_SWS ) {
+            s->LFS[recv_id] = (s->LFS[recv_id] + 1) % MAX_SEQ;
+            s->SWS[recv_id] = (s->LFS[recv_id] + MAX_SEQ - s->LAR[recv_id]) % MAX_SEQ;
+
+            Frame *payload = (Frame *)malloc(sizeof(Frame));
+            payload->src = input->src_id;
+            payload->dst = recv_id;
+            payload->seq = s->LFS[recv_id];
+            payload->ctr = SYN_MASK;
+            payload->grp_id = 0; //not used yet
+            strcpy(payload->data, input->message);
+            payload->crc = 0; //not used yet;
+            
+            FrameBuf *sendFrame = (FrameBuf *)malloc(sizeof(FrameBuf));
+            sendFrame->buf = convert_frame_to_char(payload);
+            
+            // ?? Do i need this? will there be any gaps at any time?
+            // Not yet, but will arise with selective sequencing
+            LLnode *iter = s->sentAwait[recv_id];
+            while( (iter = iter->next) != s->sentAwait[recv_id]) {
+                if( payload->seq < ((FrameBuf *)iter->value)->buf[2] ) {
+                    break;
+                }
+            }
+            gettimeofday(&sendFrame->expires, NULL);
+            sendFrame->expires.tv_usec += MAX_WAIT;
+            if ( sendFrame->expires.tv_usec >= 1000000) {
+                sendFrame->expires.tv_sec++;
+                sendFrame->expires.tv_usec -= 1000000;
+            }
+            ll_append_node(&iter, sendFrame);
+            ll_append_node(outgoing, makecopy(sendFrame));
+            free(payload);
+        }
+        free(input->message);
+        free(input);
+    }
 }
 
 void handle_timedout_frames(Sender * s, LLnode ** outgoing) {
