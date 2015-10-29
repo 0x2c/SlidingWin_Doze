@@ -126,10 +126,9 @@ struct Receiver_t {
     uchar8_t *GRP; // last group id received
     uchar8_t *LAF; // Largest Acceptable Frame
     uchar8_t *LFR; // Last Frame Received >ACK Sent
-    uchar8_t *RWS; // Receiver Window Size ( LAF<seq#> - LFR<seq#> <= RWS )
     
-    LLnode **memoryBuf; // Store out of order frames
-    LLnode **fragments; // Store fragments to be reconstituted;
+    LLnode **buffer;
+    LLnode **memoryBuf; // Store fragments to be reconstituted;
 };
 
 enum SendFrame_DstType {

@@ -1,12 +1,22 @@
 #include "receiver.h"
 
-void init_receiver(Receiver * receiver,
-                   int id)
-{
-    receiver->recv_id = id;
-    receiver->input_framelist_head = NULL;
-    pthread_cond_init(&receiver->buffer_cv, NULL);
-    pthread_mutex_init(&receiver->buffer_mutex, NULL);
+void init_receiver(Receiver * r, int id) {
+    r->recv_id = id;
+    r->input_framelist_head = NULL;
+    pthread_cond_init(&r->buffer_cv, NULL);
+    pthread_mutex_init(&r->buffer_mutex, NULL);
+    
+    int N = glb_senders_array_length;
+    allocArray(r->GRP, uchar8_t, N, 0);
+    allocArray(r->LAF, uchar8_t, N, MAX_RWS - 1); // since max is 128, or 127 in 0idx.
+    allocArray(r->LFR, uchar8_t, N, 0);
+    allocArray(r->buffer, LLnode *, N, 0);
+    allocArray(r->memoryBuf, LLnode *, N, 0);
+    
+    while( --N >= 0 ) {
+        ll_insert_node(&r->buffer[N], (LLnode *)malloc(sizeof(LLnode)), llt_head);
+        ll_insert_node(&r->memoryBuf[N], (LLnode *)malloc(sizeof(LLnode)), llt_head);
+    }
 }
 
 
