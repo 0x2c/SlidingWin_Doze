@@ -32,6 +32,11 @@
 #define MAX_FRAME_SIZE 64
 #define FRAME_PAYLOAD_SIZE 48
 
+#define allocArray(_p, _type, _length, _init) do{\
+    _p = (_type*)malloc( _length * sizeof(_type) );\
+    memset(_p, _init, _length);\
+} while(0);
+
 typedef unsigned char uchar8_t;
 
 /*......................... FRAME DEF .........................*/

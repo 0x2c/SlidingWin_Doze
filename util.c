@@ -16,70 +16,53 @@ int ll_get_length(LLnode * head) {
 	}
 }
 
-void ll_append_node(LLnode ** head_ptr, void * value) {
-	LLnode * prev_last_node;
-	LLnode * new_node;
-	LLnode * head;
-
-	if (head_ptr == NULL) {
-		return;
-	}
-	
-	//Init the value pntr
-	head = (*head_ptr);
-	new_node = (LLnode *) malloc(sizeof(LLnode));
-	new_node->value = value;
-
-	//The list is empty, no node is currently present
-	if (head == NULL) {
-		(*head_ptr) = new_node;
-		new_node->prev = new_node;
-		new_node->next = new_node;
-	} else {
-		//Node exists by itself
-		prev_last_node = head->prev;
-		head->prev = new_node;
-		prev_last_node->next = new_node;
-		new_node->next = head;
-		new_node->prev = prev_last_node;
-	}
+// PostConfiguration: ..<-[newNode]<->[head]->..
+void ll_append_node(LLnode ** headPtr, void * value) {
+    LLnode * newNode;
+    LLnode * head;
+    if( headPtr == NULL )
+        return;
+    head = *headPtr;
+    newNode = (LLnode *) malloc(sizeof(LLnode));
+    newNode->value = value;
+    if( head == NULL ) {
+        (*headPtr) = newNode;
+        newNode->prev = newNode->next = newNode;
+    } else {
+        newNode->prev = head->prev;
+        newNode->next = head;
+        newNode->prev->next = newNode;
+        head->prev = newNode;
+    }
 }
 
-
-LLnode * ll_pop_node(LLnode ** head_ptr) {
-	LLnode * last_node;
-	LLnode * new_head;
-	LLnode * prev_head;
-
-	prev_head = (*head_ptr);
-	if (prev_head == NULL) {
-		return NULL;
-	}
-	last_node = prev_head->prev;
-	new_head = prev_head->next;
-
-	//We are about to set the head ptr to nothing because there is only one thing in list
-	if (last_node == prev_head)
-	{
-		(*head_ptr) = NULL;
-		prev_head->next = NULL;
-		prev_head->prev = NULL;
-		return prev_head;
-	} else {
-		(*head_ptr) = new_head;
-		last_node->next = new_head;
-		new_head->prev = last_node;
-
-		prev_head->next = NULL;
-		prev_head->prev = NULL;
-		return prev_head;
-	}
+// Removes the head and returns it
+// Headptr set to next node or NULL if there isn't any
+LLnode * ll_pop_node(LLnode ** headPtr) {
+    LLnode *toPop = *headPtr ;
+    if( toPop == NULL) {
+        return NULL;
+    } else if( toPop->prev == toPop ) {
+        *headPtr = NULL;
+    } else {
+        *headPtr = toPop->next;
+        toPop->prev->next = *headPtr;
+        toPop->next->prev = toPop->prev;
+    }
+    toPop->next = toPop->prev = NULL;
+    return toPop;
 }
 
 void ll_destroy_node(LLnode * node) {
-	if (node->type == llt_string) {
-		free((char *) node->value);
-	}
+    if( node->type != llt_integer ) {
+        if( node->type == llt_framebuf ) {
+            free( ((FrameBuf *)node->value)->buf );
+            free( node->value );
+        } else {
+            if(node->value != NULL)
+                free(node->value);
+        }
+    }
 	free(node);
 }
 
@@ -126,4 +109,16 @@ Frame * convert_char_to_frame(char * buffer) {
   memcpy(frame->data, buffer + 4, FRAME_PAYLOAD_SIZE);
   memcpy( &frame->crc, buffer + 4 + FRAME_PAYLOAD_SIZE, 4);
   return frame;
+}
+
+uint32_t crc32(const void *buf, int len) {
+    const uint8_t *p = (unsigned char*) buf;
+    uint32_t crc = 0;
+    while (len--)
+        crc = (crc >> 8) ^ precomp32[(crc ^ *p++) & 0xFF];
+    return crc;
+}
+
+int checkcrc32(const void *frame, int32_t crc) {
+    return 1;
 }
