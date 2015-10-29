@@ -115,8 +115,8 @@ char * convert_frame_to_char(Frame * frame) {
   char *buffer = (char *) malloc(MAX_FRAME_SIZE);
   char *offset = buffer;
   memset(buffer, 0, MAX_FRAME_SIZE);
-  memcpy(offset, frame, 4);
-  offset += 4;
+  memcpy(offset, frame, 5);
+  offset += 5;
   memcpy(offset, frame->data, FRAME_PAYLOAD_SIZE);
   offset += FRAME_PAYLOAD_SIZE;
   memcpy(offset, &frame->crc, 4);
@@ -125,14 +125,15 @@ char * convert_frame_to_char(Frame * frame) {
 }
 
 Frame * convert_char_to_frame(char * buffer) {
-  Frame * frame = (Frame *) malloc(MAX_FRAME_SIZE);
+  Frame * frame = (Frame *) malloc(sizeof(Frame));
   frame->src = buffer[0];
   frame->dst = buffer[1];
   frame->seq = buffer[2];
   frame->ctr = buffer[3];
+  frame->grp_id = buffer[4];
   memset(frame->data, 0, FRAME_PAYLOAD_SIZE);
-  memcpy(frame->data, buffer + 4, FRAME_PAYLOAD_SIZE);
-  memcpy( &frame->crc, buffer + 4 + FRAME_PAYLOAD_SIZE, 4);
+  memcpy(frame->data, buffer + 5, FRAME_PAYLOAD_SIZE);
+  memcpy(&frame->crc, buffer + 5 + FRAME_PAYLOAD_SIZE, 4);
   return frame;
 }
 

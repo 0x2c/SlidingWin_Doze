@@ -9,8 +9,8 @@ void init_sender(Sender * s, int id) {
     
     int N = glb_receivers_array_length;
     allocArray(s->GRP, uchar8_t, N, 0);
-    allocArray(s->LFS, uchar8_t, N, 0);
-    allocArray(s->LAR, uchar8_t, N, 0);
+    allocArray(s->LFS, uchar8_t, N, MAX_SEQ - 1);
+    allocArray(s->LAR, uchar8_t, N, MAX_SEQ - 1);
     allocArray(s->SWS, uchar8_t, N, 0);
     
     allocArray(s->sentAwait, LLnode *, N, 0);
@@ -61,7 +61,7 @@ void handle_incoming_acks(Sender * s, LLnode ** outgoing) {
     
     while( ll_get_length(s->input_framelist_head) > 0 ) {
         LLnode *acknode = ll_pop_node(&s->input_framelist_head);
-        char *_rawframe = ((FrameBuf*)acknode->value)->buf;
+        char *_rawframe = (char *)acknode->value;
         LLnode *sent = s->sentAwait[_rawframe[1]];
         
         if( _rawframe[0] != s->send_id ) {
@@ -155,8 +155,8 @@ void handle_input_cmds(Sender * s, LLnode ** outgoing) {
                 sendFrame->expires.tv_sec++;
                 sendFrame->expires.tv_usec -= 1000000;
             }
-            ll_append_node(&iter, sendFrame);
-            ll_append_node(outgoing, makecopy(sendFrame));
+            ll_insert_node(&iter, sendFrame, llt_framebuf);
+            ll_insert_node(outgoing, makecopy(sendFrame), llt_framebuf);
             free(payload);
         }
         free(input->message);
@@ -174,7 +174,7 @@ void handle_timedout_frames(Sender * s, LLnode ** outgoing) {
         LLnode *iter = s->sentAwait[N];
         while( (iter = iter->next) != s->sentAwait[N] ) {
             FrameBuf *verify = (FrameBuf *)iter->value;
-            if( verify->expires.tv_sec >= now.tv_sec && verify->expires.tv_usec >= now.tv_usec ) {
+            if( verify->expires.tv_sec <= now.tv_sec && verify->expires.tv_usec < now.tv_usec ) {
                 verify->expires.tv_usec += MAX_WAIT;
                 if ( verify->expires.tv_usec >= 1000000) {
                     verify->expires.tv_sec++;
@@ -262,30 +262,31 @@ void * run_sender(void * input_sender) {
             pthread_cond_timedwait(&sender->buffer_cv, &sender->buffer_mutex, &time_spec);
         }
 
+        
         handle_incoming_acks(sender, &outgoing_frames_head);
 
         handle_input_cmds(sender, &outgoing_frames_head);
 
         handle_timedout_frames(sender, &outgoing_frames_head);
-        
+
         pthread_mutex_unlock(&sender->buffer_mutex);
 
         //CHANGE THIS AT YOUR OWN RISK!
         //Send out all the frames
         int ll_outgoing_frame_length = ll_get_length(outgoing_frames_head);
-        
         while(ll_outgoing_frame_length > 0) {
             LLnode * ll_outframe_node = ll_pop_node(&outgoing_frames_head);
-            char * char_buf = (char *)  ll_outframe_node->value;
+            char * char_buf = (char *)((FrameBuf *)ll_outframe_node->value)->buf;
 
             //Don't worry about freeing the char_buf, the following function does that
             send_msg_to_receivers(char_buf);
-
+            
             //Free up the ll_outframe_node
             free(ll_outframe_node);
 
             ll_outgoing_frame_length = ll_get_length(outgoing_frames_head);
         }
+        
     }
     pthread_exit(NULL);
     return 0;

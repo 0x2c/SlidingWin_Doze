@@ -18,7 +18,7 @@
 
 void init_receiver(Receiver *, int);
 int doRWS( Receiver * r, LLnode **outgoing, Frame *frame );
-void sendACK( Receiver * r, LLnode **outgoing, Frame *toSend );
+void sendACK( LLnode **outgoing, Frame *toSend );
 void handle_incoming_msgs( Receiver* r, LLnode ** outgoing );
 void * run_receiver(void *);
 
