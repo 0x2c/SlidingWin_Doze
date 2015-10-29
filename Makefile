@@ -5,9 +5,11 @@ TARGET=tritontalk
 CC = gcc
 DEBUG = -g #-v
 
-LDFLAGS = -lresolv -lnsl -lpthread -lm
+#LDFLAGS = -lresolv -lnsl -lpthread -lm
+LDFLAGS = -lresolv -lpthread -lm
 
-OS = LINUX
+#OS = LINUX
+OS = MACOSX
 
 CCFLAGS = $(DEBUG) -D$(OS)
 

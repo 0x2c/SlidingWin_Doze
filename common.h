@@ -16,30 +16,33 @@
 #define DEBUG 1
 #define MAX_COMMAND_LENGTH 16
 #define AUTOMATED_FILENAME 512
-#define MAX_SEQ 256 //actually 255, +1 out of convenience
-#define MAX_ACK 256
+#define MAX_SEQ 256
+#define MAX_GRP 256
 
 #define MAX_SWS (MAX_SEQ / 2)
-#define MAX_RWS (MAX_ACK / 2)
+#define MAX_RWS (MAX_SEQ / 2)
 #define MAX_WAIT 100000   // microseconds
 
 // Control Flag Masks
 #define SYN_MASK 0x01     
 #define ACK_MASK 0x02
 #define TMO_MASK 0x04
+#define END_MASK 0x08
 
 #define MAX_FRAME_SIZE 64
-#define FRAME_PAYLOAD_SIZE 56
+#define FRAME_PAYLOAD_SIZE 48
 
+typedef unsigned char uchar8_t;
 
 /*......................... FRAME DEF .........................*/
 struct Frame_t {
-    unsigned char src;  // sender ID        1 byte
-    unsigned char dst;  // receiver ID      1 byte
-    unsigned char seq;  // sequence number  1 byte
-    unsigned char ctr;  // control flag     1 byte
-    char data[FRAME_PAYLOAD_SIZE]; // body 56 bytes
-    uint32_t crc;                  // CRC   4 bytes
+    uchar8_t src;  // sender ID        1 byte
+    uchar8_t dst;  // receiver ID      1 byte
+    uchar8_t seq;  // sequence number  1 byte
+    uchar8_t ctr;  // control flag     1 byte
+    uchar8_t grp_id; // group id to which this packet belongs to 1 byte
+    char data[FRAME_PAYLOAD_SIZE]; // body 48 bytes
+    uint32_t crc;    // CRC
 };
 struct FrameBuf_t {
     char *buf;
@@ -55,7 +58,7 @@ typedef struct FrameBuf_t FrameBuf;
 struct SysConfig_t {
     float drop_prob;
     float corrupt_prob;
-    unsigned char automated;
+    uchar8_t automated;
     char automated_file[AUTOMATED_FILENAME];
 };
 
@@ -74,6 +77,7 @@ typedef struct Cmd_t Cmd;
 enum LLtype {
     llt_string,
     llt_frame,
+    llt_framebuf,
     llt_integer,
     llt_head
 } LLtype;
@@ -97,11 +101,14 @@ struct Sender_t {
     LLnode * input_framelist_head;
 
     int send_id;
-    unsigned char LFS; // Last Frame Sent
-    unsigned char LAR; // Last ACK Received
-    unsigned char SWS; // Sender Window Size ( LFS<seq#> - LAR<seq#> )
-
-    LLnode **buffer;   // Buffer for each rcvr, stores frames of window
+    uchar8_t *GRP; // last group id sent
+    uchar8_t *LFS; // Last Frame Sent
+    uchar8_t *LAR; // Last ACK Received
+    uchar8_t *SWS; // Sender Window Size ( LFS<seq#> - LAR<seq#> )
+    
+    LLnode **sentAwait;
+    LLnode **timedout;
+    LLnode **memoryBuf;
 };
 
 struct Receiver_t {
@@ -110,11 +117,13 @@ struct Receiver_t {
     LLnode * input_framelist_head;
     
     int recv_id;
-    unsigned char *LAF;     // Largest Acceptable Frame
-    unsigned char *LFR;     // Last Frame Received >ACK Sent
-    unsigned char *RWS;     // Receiver Window Size ( LFR<seq#> - LAF<seq#> )
-    unsigned char **buffer; // Buffer for each sndr, stores frames of window
-                            // also for out of order frames
+    uchar8_t *GRP; // last group id received
+    uchar8_t *LAF; // Largest Acceptable Frame
+    uchar8_t *LFR; // Last Frame Received >ACK Sent
+    uchar8_t *RWS; // Receiver Window Size ( LAF<seq#> - LFR<seq#> <= RWS )
+    
+    LLnode **memoryBuf; // Store out of order frames
+    LLnode **fragments; // Store fragments to be reconstituted;
 };
 
 enum SendFrame_DstType {
